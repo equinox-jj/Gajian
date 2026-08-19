@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      leak-detection-threshold: 30000
+  jpa:
+    show-sql: false
+  flyway:
+    clean-disabled: true
+  devtools:
+    restart:
+      enabled: false
+
+server:
+  error:
+    include-message: never
+    include-stacktrace: never
+
+logging:
+  level:
+    root: INFO
+    com.myproject.gajian: INFO
+    org.springframework.security: INFO

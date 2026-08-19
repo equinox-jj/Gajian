@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/gajian}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    clean-disabled: false
+  devtools:
+    restart:
+      enabled: true
+
+server:
+  error:
+    include-message: always
+    include-stacktrace: on_param
+
+logging:
+  level:
+    com.myproject.gajian: DEBUG
+    org.springframework.security: DEBUG
