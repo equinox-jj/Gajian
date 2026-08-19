@@ -33,4 +33,7 @@ build/
 .vscode/
 
 docs/
+.claude/
+### Local secrets ###
 .env
+.env.example
