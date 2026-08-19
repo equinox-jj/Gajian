@@ -15,6 +15,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -22,7 +23,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -46,7 +49,7 @@ class AuthControllerTest {
         when(authService.login(any())).thenReturn(new LoginResponse("jwt-value", "refresh-value", 900L, Role.ADMIN));
 
         // Act
-        var result = mockMvc.perform(post("/auth/login")
+        var result = mockMvc.perform(post("/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"joshua@example.com\",\"password\":\"secret\"}"));
 
@@ -66,7 +69,7 @@ class AuthControllerTest {
         // Arrange
 
         // Act
-        var result = mockMvc.perform(post("/auth/login")
+        var result = mockMvc.perform(post("/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"not-an-email\",\"password\":\"\"}"));
 
@@ -79,11 +82,54 @@ class AuthControllerTest {
     }
 
     @Test
+    void unreadableRequestBodyIsReportedAsBadRequestNotServerError() throws Exception {
+        // Arrange
+
+        // Act
+        var result = mockMvc.perform(post("/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": "));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error_code").value("MALFORMED_REQUEST"));
+    }
+
+    @Test
+    void wrongHttpMethodIsReportedAsMethodNotAllowedNotServerError() throws Exception {
+        // Arrange
+
+        // Act
+        var result = mockMvc.perform(get("/v1/auth/login"));
+
+        // Assert
+        result.andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error_code").value("METHOD_NOT_ALLOWED"));
+    }
+
+    @Test
+    void unsupportedContentTypeIsReportedAsUnsupportedMediaTypeNotServerError() throws Exception {
+        // Arrange
+
+        // Act
+        var result = mockMvc.perform(post("/v1/auth/login")
+                .contentType(MediaType.TEXT_PLAIN)
+                .content("email=joshua@example.com"));
+
+        // Assert
+        result.andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error_code").value("UNSUPPORTED_MEDIA_TYPE"));
+    }
+
+    @Test
     void unauthenticatedLogoutIsRejectedThroughTheErrorEnvelope() throws Exception {
         // Arrange
 
         // Act
-        var result = mockMvc.perform(post("/auth/logout")
+        var result = mockMvc.perform(post("/v1/auth/logout")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"refreshToken\":\"refresh-value\"}"));
 
@@ -94,40 +140,65 @@ class AuthControllerTest {
     }
 
     @Test
+    void securityErrorsAreWrittenAsUtf8() throws Exception {
+        // Arrange
+
+        // Act
+        var result = mockMvc.perform(post("/v1/auth/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"refreshToken\":\"refresh-value\"}"));
+
+        // Assert
+        result.andExpect(status().isUnauthorized())
+                .andExpect(content().encoding(StandardCharsets.UTF_8));
+    }
+
+    @Test
     void logoutRevokesTheRefreshTokenOfTheAuthenticatedUser() throws Exception {
         // Arrange
         UUID userId = UUID.randomUUID();
 
         // Act
-        var result = mockMvc.perform(post("/auth/logout")
+        var result = mockMvc.perform(post("/v1/auth/logout")
                 .with(jwt().jwt(token -> token.subject(userId.toString())))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"refreshToken\":\"refresh-value\"}"));
 
         // Assert
-        result.andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Logout berhasil"))
-                .andExpect(jsonPath("$.data").doesNotExist());
+        result.andExpect(status().isNoContent())
+                .andExpect(content().string(""));
         verify(authService).logout(eq(userId), any());
     }
 
     @Test
-    void changePasswordReturnsSuccessEnvelope() throws Exception {
+    void logoutAllReturnsNoContent() throws Exception {
         // Arrange
         UUID userId = UUID.randomUUID();
 
         // Act
-        var result = mockMvc.perform(post("/auth/change-password")
+        var result = mockMvc.perform(post("/v1/auth/logout-all")
+                .with(jwt().jwt(token -> token.subject(userId.toString()))));
+
+        // Assert
+        result.andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+        verify(authService).logoutAll(userId);
+    }
+
+    @Test
+    void changePasswordReturnsNoContent() throws Exception {
+        // Arrange
+        UUID userId = UUID.randomUUID();
+
+        // Act
+        var result = mockMvc.perform(post("/v1/auth/change-password")
                 .with(jwt().jwt(token -> token.subject(userId.toString())))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"oldPassword\":\"current-one\",\"newPassword\":\"new-password\"}"));
 
         // Assert
-        result.andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Password berhasil diubah"))
-                .andExpect(jsonPath("$.data").doesNotExist());
+        result.andExpect(status().isNoContent())
+                .andExpect(content().string(""));
         verify(authService).changePassword(eq(userId), any());
     }
 }

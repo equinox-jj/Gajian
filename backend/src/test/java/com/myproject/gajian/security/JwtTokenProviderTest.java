@@ -11,12 +11,14 @@ import org.springframework.security.oauth2.jose.jws.JwsAlgorithms;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimNames;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidationException;
 
 import javax.crypto.SecretKey;
 import java.time.Duration;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 class JwtTokenProviderTest {
 
@@ -34,7 +36,7 @@ class JwtTokenProviderTest {
         JwtConfig jwtConfig = new JwtConfig();
         SecretKey secretKey = jwtConfig.jwtSecretKey(properties);
 
-        jwtDecoder = jwtConfig.jwtDecoder(secretKey);
+        jwtDecoder = jwtConfig.jwtDecoder(secretKey, properties);
         jwtTokenProvider = new JwtTokenProvider(jwtConfig.jwtEncoder(secretKey), properties);
         user = AppUser.builder()
                 .id(UUID.randomUUID())
@@ -103,6 +105,23 @@ class JwtTokenProviderTest {
 
         // Assert
         assertThat(accessToken.expiresInSeconds()).isEqualTo(900L);
+    }
+
+    @Test
+    void rejectsTokenSignedWithTheSameSecretButAnotherIssuer() {
+        // Arrange
+        JwtProperties foreignProperties = new JwtProperties(SECRET, "someone-else", TTL);
+        JwtConfig jwtConfig = new JwtConfig();
+        SecretKey secretKey = jwtConfig.jwtSecretKey(foreignProperties);
+        JwtTokenProvider foreignProvider =
+                new JwtTokenProvider(jwtConfig.jwtEncoder(secretKey), foreignProperties);
+        String foreignToken = foreignProvider.generateAccessToken(user).value();
+
+        // Act
+        Throwable thrown = catchThrowable(() -> jwtDecoder.decode(foreignToken));
+
+        // Assert
+        assertThat(thrown).isInstanceOf(JwtValidationException.class);
     }
 
     @Test

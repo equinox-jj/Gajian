@@ -13,4 +13,6 @@ public interface RefreshTokenService {
     void revoke(UUID userId, String rawToken);
 
     void revokeAllForUser(UUID userId);
+
+    void purgeExpiredTokens();
 }

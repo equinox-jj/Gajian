@@ -171,6 +171,9 @@ Key design decisions to preserve when implementing (details in `docs/05-backend-
 - **DTOs, not entities, at the boundary**: request/response bodies are Java `record`s in each feature's `dto/` package (`UserRequest`, `UserResponse`, ...). Controllers and service return types never expose JPA entities directly.
 - **MapStruct** does entity↔DTO mapping (`@Mapper(componentModel = "spring")`, one mapper interface per feature in `dto/`). Not yet in `pom.xml` — add `mapstruct` + `mapstruct-processor` (annotation processor path, alongside the existing Lombok one) when the first feature needing mapping lands.
 - **Controllers stay thin**: routing, request validation triggers, delegating to the service layer, and wrapping the result in `ApiResponse`. No business logic in a `@RestController`.
+- **URL versioning**: every controller's `@RequestMapping` starts from `ApiConstants.API_V1` (`/v1`), matching the
+  `servers` base in `docs/04-openapi-spec.yaml` — e.g. `AuthConstants.BASE_PATH = ApiConstants.API_V1 + "/auth"`.
+  Deliberately *not* `server.servlet.context-path`, which MockMvc ignores and which would leave the real URLs untested.
 - **JWT/auth plumbing lives in `security/`** (`JwtTokenProvider`, `AccessToken`, `CustomUserDetailsService`), separate
   from the `auth/` feature module, which owns the login/refresh *business logic* (`AuthController`, `AuthService`, token
   rotation). There is deliberately **no hand-written `JwtAuthFilter`** — bearer-token authentication is Spring

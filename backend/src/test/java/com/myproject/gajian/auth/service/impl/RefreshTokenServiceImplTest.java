@@ -68,7 +68,7 @@ class RefreshTokenServiceImplTest {
         // Arrange
         String rawToken = issuedRawToken();
         RefreshToken existing = activeToken(rawToken);
-        when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(existing));
+        when(refreshTokenRepository.findByTokenHashForUpdate(any())).thenReturn(Optional.of(existing));
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(call -> call.getArgument(0));
 
         // Act
@@ -82,12 +82,27 @@ class RefreshTokenServiceImplTest {
     }
 
     @Test
+    void rotateLocksThePresentedTokenSoParallelRefreshesCannotBothSucceed() {
+        // Arrange
+        String rawToken = issuedRawToken();
+        when(refreshTokenRepository.findByTokenHashForUpdate(any())).thenReturn(Optional.of(activeToken(rawToken)));
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(call -> call.getArgument(0));
+
+        // Act
+        refreshTokenService.rotate(rawToken);
+
+        // Assert
+        verify(refreshTokenRepository).findByTokenHashForUpdate(any());
+        verify(refreshTokenRepository, never()).findByTokenHash(any());
+    }
+
+    @Test
     void rotateRevokesEverySessionWhenRevokedTokenIsReused() {
         // Arrange
         String rawToken = issuedRawToken();
         RefreshToken revoked = activeToken(rawToken);
         revoked.setRevokedAt(Instant.now().minus(1, ChronoUnit.MINUTES));
-        when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(revoked));
+        when(refreshTokenRepository.findByTokenHashForUpdate(any())).thenReturn(Optional.of(revoked));
 
         // Act
         Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(() -> refreshTokenService.rotate(rawToken));
@@ -106,7 +121,7 @@ class RefreshTokenServiceImplTest {
         String rawToken = issuedRawToken();
         RefreshToken expired = activeToken(rawToken);
         expired.setExpiresAt(Instant.now().minus(1, ChronoUnit.MINUTES));
-        when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(expired));
+        when(refreshTokenRepository.findByTokenHashForUpdate(any())).thenReturn(Optional.of(expired));
 
         // Act
         Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(() -> refreshTokenService.rotate(rawToken));
@@ -120,7 +135,7 @@ class RefreshTokenServiceImplTest {
     @Test
     void rotateRejectsUnknownToken() {
         // Arrange
-        when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.empty());
+        when(refreshTokenRepository.findByTokenHashForUpdate(any())).thenReturn(Optional.empty());
 
         // Act
         Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(() -> refreshTokenService.rotate("bogus"));
@@ -132,17 +147,84 @@ class RefreshTokenServiceImplTest {
     }
 
     @Test
-    void revokeIgnoresTokenBelongingToAnotherUser() {
+    void rotateRejectsTokenOfDeactivatedUser() {
+        // Arrange
+        String rawToken = issuedRawToken();
+        user.setActive(false);
+        when(refreshTokenRepository.findByTokenHashForUpdate(any())).thenReturn(Optional.of(activeToken(rawToken)));
+
+        // Act
+        Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(() -> refreshTokenService.rotate(rawToken));
+
+        // Assert
+        assertThat(thrown).isInstanceOf(ApiException.class)
+                .extracting(exception -> ((ApiException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.ACCOUNT_DISABLED);
+        verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+    }
+
+    @Test
+    void revokeRejectsTokenBelongingToAnotherUser() {
         // Arrange
         String rawToken = issuedRawToken();
         RefreshToken othersToken = activeToken(rawToken);
         when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(othersToken));
 
         // Act
-        refreshTokenService.revoke(UUID.randomUUID(), rawToken);
+        Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                () -> refreshTokenService.revoke(UUID.randomUUID(), rawToken));
 
         // Assert
+        assertThat(thrown).isInstanceOf(ApiException.class)
+                .extracting(exception -> ((ApiException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
         assertThat(othersToken.getRevokedAt()).isNull();
+    }
+
+    @Test
+    void revokeRejectsUnknownToken() {
+        // Arrange
+        when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.empty());
+
+        // Act
+        Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                () -> refreshTokenService.revoke(user.getId(), "bogus"));
+
+        // Assert
+        assertThat(thrown).isInstanceOf(ApiException.class)
+                .extracting(exception -> ((ApiException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
+    }
+
+    @Test
+    void revokeRejectsAlreadyRevokedToken() {
+        // Arrange
+        String rawToken = issuedRawToken();
+        RefreshToken alreadyRevoked = activeToken(rawToken);
+        Instant revokedAt = Instant.now().minus(1, ChronoUnit.MINUTES);
+        alreadyRevoked.setRevokedAt(revokedAt);
+        when(refreshTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(alreadyRevoked));
+
+        // Act
+        Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                () -> refreshTokenService.revoke(user.getId(), rawToken));
+
+        // Assert
+        assertThat(thrown).isInstanceOf(ApiException.class)
+                .extracting(exception -> ((ApiException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
+        assertThat(alreadyRevoked.getRevokedAt()).isEqualTo(revokedAt);
+    }
+
+    @Test
+    void purgeDeletesOnlyTokensThatAreBothExpiredAndRevoked() {
+        // Arrange
+
+        // Act
+        refreshTokenService.purgeExpiredTokens();
+
+        // Assert
+        verify(refreshTokenRepository).deleteExpiredAndRevoked(any(Instant.class));
     }
 
     @Test

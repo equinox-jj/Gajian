@@ -9,6 +9,10 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Validation failed"),
+    MALFORMED_REQUEST(HttpStatus.BAD_REQUEST, "Request tidak dapat dibaca"),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "Method tidak didukung untuk endpoint ini"),
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Format request tidak didukung"),
+    NOT_FOUND(HttpStatus.NOT_FOUND, "Endpoint tidak ditemukan"),
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Email atau password salah"),
     ACCOUNT_DISABLED(HttpStatus.FORBIDDEN, "Akun tidak aktif"),
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "Autentikasi diperlukan"),

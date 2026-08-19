@@ -5,6 +5,10 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+  jpa:
+    # Every association is LAZY and only DTOs cross the controller boundary, so OSIV would hold a
+    # connection for the whole request and buy nothing.
+    open-in-view: false
 
 gajian:
   jwt:

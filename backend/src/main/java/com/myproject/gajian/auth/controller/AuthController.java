@@ -41,26 +41,23 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout(
+    public ResponseEntity<Void> logout(
             @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody RefreshRequest request) {
         authService.logout(userId(jwt), request);
-        return ResponseEntity.status(HttpStatus.OK)
-                .body(ApiResponse.of(AuthConstants.MESSAGE_LOGOUT_SUCCESS, null));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/logout-all")
-    public ResponseEntity<ApiResponse<Void>> logoutAll(@AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<Void> logoutAll(@AuthenticationPrincipal Jwt jwt) {
         authService.logoutAll(userId(jwt));
-        return ResponseEntity.status(HttpStatus.OK)
-                .body(ApiResponse.of(AuthConstants.MESSAGE_LOGOUT_ALL_SUCCESS, null));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/change-password")
-    public ResponseEntity<ApiResponse<Void>> changePassword(
+    public ResponseEntity<Void> changePassword(
             @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ChangePasswordRequest request) {
         authService.changePassword(userId(jwt), request);
-        return ResponseEntity.status(HttpStatus.OK)
-                .body(ApiResponse.of(AuthConstants.MESSAGE_PASSWORD_CHANGED, null));
+        return ResponseEntity.noContent().build();
     }
 
     private UUID userId(Jwt jwt) {

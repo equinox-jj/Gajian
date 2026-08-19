@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Renders the failures raised by the security filter chain — which never reach
@@ -41,6 +42,8 @@ public class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDen
     private void write(HttpServletResponse response, ErrorCode errorCode) throws IOException {
         response.setStatus(errorCode.getStatus().value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        // Without this the writer falls back to ISO-8859-1 and mangles the Indonesian error messages.
+        response.setCharacterEncoding(StandardCharsets.UTF_8);
         objectMapper.writeValue(
                 response.getWriter(), ApiErrorResponse.of(errorCode.getDefaultMessage(), errorCode.name()));
     }

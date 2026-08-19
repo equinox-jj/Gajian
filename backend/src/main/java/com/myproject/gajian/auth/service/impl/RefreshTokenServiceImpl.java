@@ -10,6 +10,7 @@ import com.myproject.gajian.common.exception.ApiException;
 import com.myproject.gajian.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,7 +45,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public RotatedToken rotate(String rawToken) {
-        RefreshToken presented = refreshTokenRepository.findByTokenHash(hash(rawToken))
+        RefreshToken presented = refreshTokenRepository.findByTokenHashForUpdate(hash(rawToken))
                 .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REFRESH_TOKEN));
 
         if (presented.getRevokedAt() != null) {
@@ -58,6 +59,12 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         }
 
         AppUser user = presented.getUser();
+        // /auth/refresh is public, so this is the only place the disabled check runs for a returning
+        // session — DaoAuthenticationProvider only sees the login path.
+        if (!user.isActive()) {
+            throw new ApiException(ErrorCode.ACCOUNT_DISABLED);
+        }
+
         String replacementRawToken = generateRawToken();
         presented.setReplacedByToken(persist(user, replacementRawToken));
         presented.setRevokedAt(Instant.now());
@@ -68,16 +75,28 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public void revoke(UUID userId, String rawToken) {
-        refreshTokenRepository.findByTokenHash(hash(rawToken))
-                .filter(token -> token.getUser().getId().equals(userId))
-                .filter(token -> token.getRevokedAt() == null)
-                .ifPresent(token -> token.setRevokedAt(Instant.now()));
+        RefreshToken token = refreshTokenRepository.findByTokenHash(hash(rawToken))
+                .filter(candidate -> candidate.getUser().getId().equals(userId))
+                .filter(candidate -> candidate.getRevokedAt() == null)
+                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REFRESH_TOKEN));
+
+        token.setRevokedAt(Instant.now());
     }
 
     @Override
     @Transactional
     public void revokeAllForUser(UUID userId) {
         refreshTokenRepository.revokeAllByUserId(userId, Instant.now());
+    }
+
+    @Override
+    @Transactional
+    @Scheduled(cron = AuthConstants.REFRESH_TOKEN_PURGE_CRON)
+    public void purgeExpiredTokens() {
+        Instant now = Instant.now();
+        refreshTokenRepository.clearReplacementLinksOfExpiredAndRevoked(now);
+        int purged = refreshTokenRepository.deleteExpiredAndRevoked(now);
+        log.info("Purged {} expired refresh tokens", purged);
     }
 
     private RefreshToken persist(AppUser user, String rawToken) {
