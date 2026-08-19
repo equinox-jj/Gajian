@@ -1,0 +1,24 @@
+package com.myproject.gajian.security;
+
+import com.myproject.gajian.auth.repository.AppUserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class CustomUserDetailsService implements UserDetailsService {
+
+    private final AppUserRepository appUserRepository;
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserDetails loadUserByUsername(String email) {
+        return appUserRepository.findByEmail(email)
+                .map(AppUserDetails::new)
+                .orElseThrow(() -> new UsernameNotFoundException(email));
+    }
+}

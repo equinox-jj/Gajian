@@ -1,4 +1,4 @@
-package com.myproject.gajian.security.entity;
+package com.myproject.gajian.auth.entity;
 
 public enum Role {
     ADMIN,
