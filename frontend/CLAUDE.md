@@ -66,6 +66,12 @@ Clean architecture, organized **by feature**, not by layer-at-the-top. Each feat
 - **No circular dependencies.** A feature may depend on `core`/`shared`; `core`/`shared` never depend on a feature; features don't depend on each other directly — factor shared needs into `shared/` instead.
 - **No business logic in UI.** Pages/widgets read state and dispatch events; they never branch on domain rules, transform API data, or make decisions. That logic belongs in a riverpod notifier or a usecase in `domain/`.
 
+### Barrel files
+
+- Every folder exposes its public surface through one barrel named after the folder — `lib/core/theme/theme.dart`, `lib/features/auth/domain/domain.dart` — that re-exports the files beside it plus the barrels of its child folders. A new file is not done until it's exported from its folder's barrel.
+- Import across folders through the barrel (`import 'package:gajian/core/theme/theme.dart';`), never deep-import a single file from another folder. Within a folder, import siblings directly.
+- Never export generated `*.freezed.dart` / `*.g.dart` — they are `part` files of their source.
+
 ### State management — Riverpod + riverpod_generator
 
 - One riverpod provider (generator-based, `@riverpod`) per page, holding a `freezed` state class updated via `copyWith`. Bottom sheets and dialogs that carry their own state get their own provider too, scoped to that sheet/dialog rather than piggybacking on the parent page's.
